@@ -1,0 +1,19 @@
+# Run presets of derniers-ordres, for `hftas play|record PRESET`.
+#
+# Option ids come from games/derniers-ordres/eternalfest.toml, [modes.solo.options]:
+#   nightmare = Cauchemar       boost = Tornade        insight = Intuition
+# `hftas options` lists every option of the mode.
+#
+# A preset can override any key of [defaults].
+
+[defaults]
+mode = "solo"
+# eternaldev profile giving the families ([profiles] of the game's eternalfest.toml)
+profile = "default"
+options = ["insight", "boost"]
+
+[defaults.settings]
+detail = true
+shake = true
+sound = true
+music = false
