@@ -1,0 +1,3 @@
+[submodule "hammerfest-deluxe"]
+	path = games/hammerfest-deluxe
+	url = https://gitlab.com/eternalfest/games/hammerfest-deluxe.git
