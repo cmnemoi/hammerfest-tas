@@ -11,6 +11,7 @@ Make TAS of [Eternalfest](https://eternalfest.net/) contrées with libTAS.
 ## Install
 
 ```sh
+git clone https://github.com/cmnemoi/hammerfest-tas.git
 distrobox assemble create --file distrobox.ini
 distrobox enter hammerfest-tas
 mise install && mise run setup
@@ -81,3 +82,7 @@ Then restart `hftas serve`. Presets are optional: see `presets/hammerfest-deluxe
 ```sh
 mise run test
 ```
+
+## License
+
+[Apache 2.0](LICENSE)
