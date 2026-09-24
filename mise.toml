@@ -33,7 +33,7 @@ dir = "{{config_root}}"
 run = [
   "git submodule update --init",
   "uv sync",
-  "hftas setup",
+  "hftas build",
 ]
 
 [tasks.serve]

@@ -42,7 +42,7 @@ class Game:
         except GameError as error:
             raise GameError(
                 f"{error}. On \"remote archive doesn't match the expected checksum\" errors, check the archives "
-                f"were republished, then retry with `hftas setup -g {self.name} --update-checksums`"
+                f"were republished, then retry with `hftas build -g {self.name} --update-checksums`"
             ) from None
 
     def build(self) -> None:

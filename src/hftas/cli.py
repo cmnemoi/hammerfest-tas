@@ -1,19 +1,15 @@
-"""hftas: play, record and replay local Eternalfest games under libTAS.
+"""hftas: TAS local Eternalfest games under libTAS.
 
 Games are git submodules in games/<name>; -g picks one (default: $HFTAS_GAME, else the only game).
 From the host, hftas runs itself inside the hammerfest-tas distrobox.
 
-  hftas games                            list the games of the workspace
-  hftas setup                            install and build every game
-  hftas serve                            serve every game with eternaldev (own terminal)
-  hftas status                           is eternaldev running, which games does it serve
-  hftas presets                          list the run presets (presets/<game>.toml)
-  hftas options                          list the options of the mode
-  hftas play speedrun-no-rng             play a new run under libTAS, straight from eternaldev
-  hftas play sandbox -o ninja -x insight   ... with an extra option, without another
-  hftas play sandbox --ruffle-only       ... in Ruffle alone, to test something
-  hftas record pap-rng                   play a new run and record it in recordings/<game>/pap-rng
-  hftas replay pap-rng                   replay it identically, without eternaldev
+  hftas serve                  serve every game with eternaldev (own terminal)
+  hftas status                 eternaldev, games, their options, presets and recordings
+  hftas run pap-rng            first time: new run of the preset, recorded in recordings/<game>/pap-rng
+                               then: replays that same run, to TAS it (eternaldev not needed)
+  hftas run pap-rng --new      record a new run in its place
+  hftas run sandbox -o ninja -x insight   new run with an extra option, without another
+  hftas build                  install and build every game (or -g one), after changing it
 """
 
 import argparse
@@ -75,28 +71,31 @@ def _config(args) -> RunConfig:
     return config
 
 
-def _recording(args, name: str | None) -> Recording:
-    return Recording(args.dir or _game(args).recordings_dir / (name or "custom"))
+def _recording(args) -> Recording:
+    return Recording(args.dir or _game(args).recordings_dir / (args.name or args.preset or "default"))
 
 
-def cmd_games(args) -> int:
-    for game in args.workspace.games():
-        presets = load_presets(game.presets_file)[1]
-        print(f"{game.name:24} {'built' if game.is_built() else 'not built':10} {len(presets)} preset(s)")
-    return 0
+def _games(args) -> list[Game]:
+    return [_game(args)] if args.game else args.workspace.games()
 
 
-def cmd_setup(args) -> int:
-    games = [_game(args)] if args.game else args.workspace.games()
-    for game in games:
-        log.info("Installing and building %s", game.name)
-        game.install(update_checksums=args.update_checksums)
-        game.build()
-    return 0
+def cmd_run(args) -> int:
+    recording = _recording(args)
+    if recording.exists() and not args.new:
+        if args.option or args.without or args.mode or args.profile:
+            raise RecordingError(
+                f"{recording.directory.name} is already recorded, so its options are fixed: "
+                "drop them, or record a new run with --new"
+            )
+        return _tas(args).replay(recording, args.tas)
+    return _tas(args).record(_config(args), recording, args.tas)
 
 
 def cmd_build(args) -> int:
-    _game(args).build()
+    for game in _games(args):
+        log.info("Installing and building %s", game.name)
+        game.install(update_checksums=args.update_checksums)
+        game.build()
     return 0
 
 
@@ -105,42 +104,28 @@ def cmd_serve(args) -> int:
 
 
 def cmd_status(args) -> int:
+    eternaldev = Eternaldev(args.server)
     try:
-        projects = Eternaldev(args.server).projects()
+        projects = eternaldev.projects()
+        print(f"eternaldev: running on {args.server}")
     except EternaldevError:
+        projects = None
         print(f"eternaldev: not running on {args.server} (start it with `hftas serve`)")
-        return 1
-    print(f"eternaldev: running on {args.server}")
-    for game in args.workspace.games():
-        state = "served" if game.dir.resolve() in projects else "not served (restart `hftas serve`)"
-        print(f"  {game.name:24} {state}{'' if game.is_built() else ', not built (`hftas build`)'}")
-    return 0
-
-
-def cmd_presets(args) -> int:
-    _, presets = load_presets(_game(args).presets_file)
-    for name, config in presets.items():
-        print(f"{name:20} {config.mode:8} {config.profile:8} {', '.join(config.options) or '-'}")
-    return 0
-
-
-def cmd_options(args) -> int:
-    mode = args.mode or load_presets(_game(args).presets_file)[0].mode
-    for option in _tas(args).options(mode):
-        print(option)
-    return 0
-
-
-def cmd_play(args) -> int:
-    return _tas(args).play(_config(args), args.tas)
-
-
-def cmd_record(args) -> int:
-    return _tas(args).record(_config(args), _recording(args, args.name or args.preset), args.tas)
-
-
-def cmd_replay(args) -> int:
-    return _tas(args).replay(_recording(args, args.name), args.tas)
+    for game in _games(args):
+        game_id = projects.get(game.dir.resolve()) if projects is not None else None
+        state = ["built" if game.is_built() else "not built (`hftas build`)"]
+        if projects is not None:
+            state.append("served" if game_id else "not served (restart `hftas serve`)")
+        defaults, presets = load_presets(game.presets_file)
+        print(f"\n{game.name}: {', '.join(state)}")
+        if game_id is not None:
+            print(f"  options ({defaults.mode}): {', '.join(eternaldev.modes(game_id).get(defaults.mode, [])) or '-'}")
+        print("  presets:")
+        for name, config in {"(default)": defaults, **presets}.items():
+            print(f"    {name:20} {', '.join(config.options) or '-'}")
+        recordings = sorted(d.name for d in game.recordings_dir.glob("*") if Recording(d).exists())
+        print(f"  recordings: {', '.join(recordings) or '-'}")
+    return 0 if projects is not None else 1
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -157,36 +142,23 @@ def _parser() -> argparse.ArgumentParser:
         sub.set_defaults(command=function)
         return sub
 
-    command("games", cmd_games, "list the games of the workspace")
-    command("setup", cmd_setup, "install and build every game (or -g one)").add_argument(
+    command("serve", cmd_serve, "serve every game with eternaldev until Ctrl+C")
+    command("status", cmd_status, "show eternaldev, the games, their options, presets and recordings")
+    command("build", cmd_build, "install and build every game (or -g one), after changing it").add_argument(
         "--update-checksums", action="store_true",
         help="accept the registry's archives when they no longer match the lockfile checksums (rewrites yarn.lock)",
     )
-    command("build", cmd_build, "build a game, after changing it")
-    command("serve", cmd_serve, "serve every game with eternaldev until Ctrl+C")
-    command("status", cmd_status, "tell whether eternaldev is running and which games it serves")
-    command("presets", cmd_presets, "list the run presets of a game")
-    command("options", cmd_options, "list the options of a mode").add_argument("--mode", help="default: from the presets")
 
-    for name, function, help in [
-        ("play", cmd_play, "play a new run straight from eternaldev"),
-        ("record", cmd_record, "play a new run and record it for replays"),
-    ]:
-        sub = command(name, function, help)
-        sub.add_argument("preset", nargs="?", help="preset from presets/<game>.toml (default: its [defaults])")
-        sub.add_argument("-o", "--option", action="append", default=[], help="add an option (repeatable)")
-        sub.add_argument("-x", "--without", action="append", default=[], help="remove an option of the preset (repeatable)")
-        sub.add_argument("--mode", help="game mode (default: from the preset)")
-        sub.add_argument("--profile", help="eternaldev profile giving the families (default: from the preset)")
-        sub.add_argument("--ruffle-only", dest="tas", action="store_false", help=RUFFLE_ONLY_HELP)
-        if name == "record":
-            sub.add_argument("--name", help="recording name (default: the preset)")
-            sub.add_argument("--dir", type=Path, help="recording directory (default: recordings/<game>/NAME)")
-
-    replay = command("replay", cmd_replay, "replay a recorded run, without eternaldev")
-    replay.add_argument("name", nargs="?", help="recording name (recordings/<game>/NAME)")
-    replay.add_argument("--dir", type=Path, help="recording directory, e.g. an older mirror/")
-    replay.add_argument("--ruffle-only", dest="tas", action="store_false", help=RUFFLE_ONLY_HELP)
+    run = command("run", cmd_run, "record a new run, or replay it once recorded")
+    run.add_argument("preset", nargs="?", help="preset from presets/<game>.toml (default: its [defaults])")
+    run.add_argument("--name", help="recording name (default: the preset)")
+    run.add_argument("--new", action="store_true", help="record a new run even if one is recorded")
+    run.add_argument("-o", "--option", action="append", default=[], help="add an option (repeatable, new runs only)")
+    run.add_argument("-x", "--without", action="append", default=[], help="remove an option of the preset (repeatable, new runs only)")
+    run.add_argument("--mode", help="game mode (default: from the preset, new runs only)")
+    run.add_argument("--profile", help="eternaldev profile giving the families (default: from the preset, new runs only)")
+    run.add_argument("--dir", type=Path, help="recording directory (default: recordings/<game>/NAME), e.g. an older mirror/")
+    run.add_argument("--ruffle-only", dest="tas", action="store_false", help=RUFFLE_ONLY_HELP)
     return parser
 
 

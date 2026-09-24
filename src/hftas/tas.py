@@ -37,12 +37,6 @@ class Tas:
         with mirror(recording, self.mirror_port) as url:
             return self.launcher.launch(Launch(url, run, tas))
 
-    def options(self, mode: str) -> list[str]:
-        modes = self.eternaldev.modes(self._game_id())
-        if mode not in modes:
-            raise EternaldevError(f"Unknown mode {mode!r} (available: {', '.join(modes)})")
-        return modes[mode]
-
     def _create_run(self, config: RunConfig) -> dict:
         if not self.game.is_built():
             raise EternaldevError(f"{self.game.name} is not built: run `hftas build -g {self.game.name}`")

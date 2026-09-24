@@ -34,6 +34,9 @@ class Recording:
     def run_file(self) -> Path:
         return self.directory / "run.json"
 
+    def exists(self) -> bool:
+        return self.run_file.exists()
+
     def start(self, run: dict) -> None:
         """Starts a new recording: responses of the previous run are dropped."""
         if self.directory.exists():
@@ -44,7 +47,7 @@ class Recording:
 
     def run(self) -> dict:
         if not self.run_file.exists():
-            raise RecordingError(f"No recorded run in {self.directory}: record one first (`hftas record`)")
+            raise RecordingError(f"No recorded run in {self.directory}: record one first (`hftas run`)")
         return json.loads(self.run_file.read_text())
 
     def load(self, method: str, path: str) -> tuple[int, dict, bytes] | None:

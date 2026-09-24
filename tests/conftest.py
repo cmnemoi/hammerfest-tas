@@ -59,14 +59,11 @@ class TasWorld:
             workspace=self.workspace,
         )
 
-    def play(self, *args: str) -> int:
-        return self.hftas("play", *args)
+    def run(self, *args: str) -> int:
+        return self.hftas("run", *args)
 
-    def record(self, name: str, *args: str) -> int:
-        return self.hftas("record", *args, "--name", name)
-
-    def replay(self, name: str, *args: str) -> int:
-        return self.hftas("replay", name, *args)
+    def run_named(self, name: str, *args: str) -> int:
+        return self.hftas("run", *args, "--name", name)
 
     # --- Situations ----------------------------------------------------------
 
