@@ -1,0 +1,25 @@
+{
+  // Restore Terminals (EthanSK.restore-terminals): a shell inside the distrobox, and eternaldev.
+  // One command per terminal: a command typed after `distrobox enter` is lost while the box starts.
+  // hftas (behind `mise run serve`) enters the distrobox by itself.
+  "restoreTerminals.runOnStartup": true,
+  "restoreTerminals.keepExistingTerminalsOpen": false,
+  "restoreTerminals.terminals": [
+    {
+      "splitTerminals": [
+        {
+          "name": "shell",
+          "commands": ["distrobox enter hammerfest-tas"]
+        }
+      ]
+    },
+    {
+      "splitTerminals": [
+        {
+          "name": "eternaldev",
+          "commands": ["mise run serve"]
+        }
+      ]
+    }
+  ]
+}
