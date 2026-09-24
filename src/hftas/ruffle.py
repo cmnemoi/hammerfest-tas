@@ -93,6 +93,9 @@ class RuffleLauncher:
             command = libtas_command(self._which(self.libtas), ruffle_path, launch)
             # libTAS is X11-only: hide Wayland so Ruffle falls back to XWayland
             env.pop("WAYLAND_DISPLAY", None)
+            # Qt still picks Wayland from XDG_SESSION_TYPE (connecting to wayland-0 by default),
+            # and the libTAS input editor then stops repainting: force its GUI on X11 too
+            env["QT_QPA_PLATFORM"] = "xcb"
             log.info("Launching Ruffle under libTAS (clock: %s)", datetime.fromtimestamp(launch.start_time).isoformat())
         else:
             command = [ruffle_path, *ruffle_args(launch)]
