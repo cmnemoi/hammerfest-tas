@@ -7,6 +7,14 @@ LIBTAS="libTAS"
 # TAS=1 to launch Ruffle under libTAS instead of directly
 TAS="${TAS:-0}"
 
+# MIRROR=record: Ruffle goes through a local mirror that saves every eternalfest.net response
+# MIRROR=replay: reuse the recorded run and responses, no network (identical launches for TAS)
+MIRROR="${MIRROR:-}"
+MIRROR_DIR="${MIRROR_DIR:-$(dirname "$(realpath "$0")")/mirror}"
+MIRROR_PORT="${MIRROR_PORT:-8765}"
+# System Python explicitly: the mise shim has no global version
+PYTHON="${PYTHON:-/usr/bin/python3}"
+
 BASE_URL="https://eternalfest.net"
 GAME_ID="0dc0d559-de83-4e0c-982d-fc56100dfdd5"
 VERSION="2.5.1"
@@ -77,14 +85,24 @@ log_step "0. Checks"
 
 # Must be set before running the script:
 # export EF_COOKIE='ef_sid=...; locale=fr-FR'
-if [[ -z "${EF_COOKIE:-}" ]]; then
+# (not needed in replay mode: nothing reaches Eternalfest)
+if [[ "$MIRROR" == replay ]]; then
+  EF_COOKIE=""
+elif [[ -z "${EF_COOKIE:-}" ]]; then
   log_error "Missing EF_COOKIE (export EF_COOKIE='ef_sid=...; locale=fr-FR')"
   exit 1
+else
+  log_ok "EF_COOKIE set (${#EF_COOKIE} chars)"
 fi
-log_ok "EF_COOKIE set (${#EF_COOKIE} chars)"
+
+if [[ -n "$MIRROR" && "$MIRROR" != record && "$MIRROR" != replay ]]; then
+  log_error "Unknown MIRROR=$MIRROR (expected record or replay)"
+  exit 1
+fi
 
 DEPS=(curl jq "$RUFFLE")
 [[ "$TAS" == 1 ]] && DEPS+=("$LIBTAS")
+[[ -n "$MIRROR" ]] && DEPS+=("$PYTHON")
 for cmd in "${DEPS[@]}"; do
   if ! command -v "$cmd" > /dev/null; then
     log_error "Command not found: $cmd"
@@ -94,68 +112,91 @@ done
 log_ok "Dependencies found: curl, jq, $("$RUFFLE" --version)"
 log_info "Game: $GAME_ID (version $VERSION)"
 
-log_step "1. Fetching logged-in user"
-AUTH_JSON="$(api_call GET /api/v1/auth/self)"
-log_json "auth/self" "$AUTH_JSON"
+# Creates a new run on Eternalfest and sets RUN_JSON
+create_run() {
+  log_step "1. Fetching logged-in user"
+  AUTH_JSON="$(api_call GET /api/v1/auth/self)"
+  log_json "auth/self" "$AUTH_JSON"
 
-USER_ID="$(jq -r '.user.id // empty' <<< "$AUTH_JSON")"
-if [[ -z "$USER_ID" ]]; then
-  log_error "No user in response (expired cookie?): $AUTH_JSON"
-  exit 1
+  USER_ID="$(jq -r '.user.id // empty' <<< "$AUTH_JSON")"
+  if [[ -z "$USER_ID" ]]; then
+    log_error "No user in response (expired cookie?): $AUTH_JSON"
+    exit 1
+  fi
+  USER_NAME="$(jq -r '.user.display_name // .user.displayName // "?"' <<< "$AUTH_JSON")"
+  log_ok "User: $USER_NAME ($USER_ID)"
+
+  log_step "2. Building run creation request"
+  CREATE_RUN_JSON="$(
+    jq -nc \
+      --arg game_id "$GAME_ID" \
+      --arg version "$VERSION" \
+      --arg user_id "$USER_ID" \
+      '{
+        game: {
+          id: $game_id
+        },
+        channel: "main",
+        version: $version,
+        user: {
+          type: "User",
+          id: $user_id
+        },
+        game_mode: "deluxe",
+        game_options: [
+          "nightmare",
+          "noeffect"
+        ],
+        settings: {
+          detail: true,
+          shake: true,
+          sound: true,
+          music: false,
+          volume: 100,
+          locale: "fr-FR"
+        }
+      }'
+  )"
+  log_info "Mode: $(jq -r '.game_mode' <<< "$CREATE_RUN_JSON"), options: $(jq -r '.game_options | join(", ")' <<< "$CREATE_RUN_JSON")"
+  log_json "Request" "$CREATE_RUN_JSON"
+
+  log_step "3. Creating new run"
+  RUN_JSON="$(
+    api_call POST /api/v1/runs \
+      --header 'Content-Type: application/json' \
+      --header "Origin: $BASE_URL" \
+      --header "Referer: $BASE_URL/games/$GAME_ID?channel=main" \
+      --data "$CREATE_RUN_JSON"
+  )"
+  log_json "Run" "$RUN_JSON"
+
+  RUN_ID="$(jq -r '.id // empty' <<< "$RUN_JSON")"
+  if [[ -z "$RUN_ID" ]]; then
+    log_error "No id in run creation response: $RUN_JSON"
+    exit 1
+  fi
+  log_ok "Run created: $RUN_ID ($BASE_URL/runs/$RUN_ID)"
+}
+
+if [[ "$MIRROR" == replay ]]; then
+  log_step "1-3. Reusing recorded run"
+  if [[ ! -f "$MIRROR_DIR/run.json" ]]; then
+    log_error "No recorded run in $MIRROR_DIR: launch once with MIRROR=record first"
+    exit 1
+  fi
+  RUN_JSON="$(cat "$MIRROR_DIR/run.json")"
+  RUN_ID="$(jq -r '.id' <<< "$RUN_JSON")"
+  log_ok "Run: $RUN_ID (recorded $(jq -r '.created_at' <<< "$RUN_JSON"))"
+else
+  create_run
+  if [[ "$MIRROR" == record ]]; then
+    # Start from an empty mirror: the new run's responses replace the old ones
+    rm -rf "$MIRROR_DIR"
+    mkdir -p "$MIRROR_DIR"
+    printf '%s\n' "$RUN_JSON" > "$MIRROR_DIR/run.json"
+    log_ok "Run saved to $MIRROR_DIR/run.json"
+  fi
 fi
-USER_NAME="$(jq -r '.user.display_name // .user.displayName // "?"' <<< "$AUTH_JSON")"
-log_ok "User: $USER_NAME ($USER_ID)"
-
-log_step "2. Building run creation request"
-CREATE_RUN_JSON="$(
-  jq -nc \
-    --arg game_id "$GAME_ID" \
-    --arg version "$VERSION" \
-    --arg user_id "$USER_ID" \
-    '{
-      game: {
-        id: $game_id
-      },
-      channel: "main",
-      version: $version,
-      user: {
-        type: "User",
-        id: $user_id
-      },
-      game_mode: "deluxe",
-      game_options: [
-        "nightmare",
-        "noeffect"
-      ],
-      settings: {
-        detail: true,
-        shake: true,
-        sound: true,
-        music: false,
-        volume: 100,
-        locale: "fr-FR"
-      }
-    }'
-)"
-log_info "Mode: $(jq -r '.game_mode' <<< "$CREATE_RUN_JSON"), options: $(jq -r '.game_options | join(", ")' <<< "$CREATE_RUN_JSON")"
-log_json "Request" "$CREATE_RUN_JSON"
-
-log_step "3. Creating new run"
-RUN_JSON="$(
-  api_call POST /api/v1/runs \
-    --header 'Content-Type: application/json' \
-    --header "Origin: $BASE_URL" \
-    --header "Referer: $BASE_URL/games/$GAME_ID?channel=main" \
-    --data "$CREATE_RUN_JSON"
-)"
-log_json "Run" "$RUN_JSON"
-
-RUN_ID="$(jq -r '.id // empty' <<< "$RUN_JSON")"
-if [[ -z "$RUN_ID" ]]; then
-  log_error "No id in run creation response: $RUN_JSON"
-  exit 1
-fi
-log_ok "Run created: $RUN_ID ($BASE_URL/runs/$RUN_ID)"
 
 log_step "4. Building loader options"
 # Eternalfest passes this projection of the run separately
@@ -169,22 +210,41 @@ OPTIONS_JSON="$(
 )"
 log_info "Options: $OPTIONS_JSON"
 
-log_step "5. Launching Ruffle"
-log_info "SWF: $BASE_URL/assets/loader.swf"
+# The loader calls the API on the server it was loaded from: serving it from the mirror
+# sends every game request through the mirror
+GAME_URL="$BASE_URL"
+if [[ -n "$MIRROR" ]]; then
+  log_step "5. Starting mirror ($MIRROR)"
+  GAME_URL="http://127.0.0.1:$MIRROR_PORT"
+  "$PYTHON" "$(dirname "$(realpath "$0")")/mirror.py" "$MIRROR" "$MIRROR_DIR" "$MIRROR_PORT" &
+  MIRROR_PID=$!
+  # Stop the mirror with the script, including on Ctrl+C / kill (EXIT alone skips signals)
+  trap 'kill "$MIRROR_PID" 2> /dev/null' EXIT
+  trap 'exit 130' INT TERM
+  for _ in {1..50}; do
+    # Probe the port only: a real request would be recorded (or a 404 in replay)
+    (: > "/dev/tcp/127.0.0.1/$MIRROR_PORT") 2> /dev/null && break
+    sleep 0.1
+  done
+  log_ok "Mirror listening on $GAME_URL ($MIRROR_DIR)"
+fi
+
+log_step "6. Launching Ruffle"
+log_info "SWF: $GAME_URL/assets/loader.swf"
 log_info "RUST_LOG=$RUST_LOG"
 
 # Arguments to launch the exact Eternalfest loader
 RUFFLE_ARGS=(
-  --base "$BASE_URL/"
-  --spoof-url "$BASE_URL/assets/loader.swf"
-  --referer "$BASE_URL/runs/$RUN_ID"
-  --cookie "$EF_COOKIE"
+  --base "$GAME_URL/"
+  --spoof-url "$GAME_URL/assets/loader.swf"
+  --referer "$GAME_URL/runs/$RUN_ID"
   --dummy-external-interface
   -P "object_id=swf1234"
   -P "run=$RUN_JSON"
   -P "game=$GAME_ID"
   -P "options=$OPTIONS_JSON"
 )
+[[ -n "$EF_COOKIE" ]] && RUFFLE_ARGS+=(--cookie "$EF_COOKIE")
 
 set +e
 if [[ "$TAS" == 1 ]]; then
@@ -198,7 +258,7 @@ if [[ "$TAS" == 1 ]]; then
   # libTAS is X11-only: hide Wayland so Ruffle falls back to XWayland.
   # libTAS joins the game args into one string run through `sh -c` (dash): single-quote
   # each one, otherwise the `;` in the cookie and the spaces in the JSON split the command.
-  RUFFLE_ARGS+=("$BASE_URL/assets/loader.swf")
+  RUFFLE_ARGS+=("$GAME_URL/assets/loader.swf")
   QUOTED_ARGS=()
   for arg in "${RUFFLE_ARGS[@]}"; do QUOTED_ARGS+=("'${arg//\'/\'\\\'\'}'"); done
   # libTAS fakes the clock, starting at 1970 by default: HTTPS certificates are then
@@ -208,7 +268,7 @@ if [[ "$TAS" == 1 ]]; then
   env -u WAYLAND_DISPLAY "$LIBTAS" --system-time-sec "$TAS_START_TIME" \
     "$(command -v "$RUFFLE")" "${QUOTED_ARGS[@]}"
 else
-  "$RUFFLE" "${RUFFLE_ARGS[@]}" "$BASE_URL/assets/loader.swf"
+  "$RUFFLE" "${RUFFLE_ARGS[@]}" "$GAME_URL/assets/loader.swf"
 fi
 RUFFLE_EXIT=$?
 set -e
