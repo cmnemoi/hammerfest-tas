@@ -263,7 +263,13 @@ if [[ "$TAS" == 1 ]]; then
   for arg in "${RUFFLE_ARGS[@]}"; do QUOTED_ARGS+=("'${arg//\'/\'\\\'\'}'"); done
   # libTAS fakes the clock, starting at 1970 by default: HTTPS certificates are then
   # "not yet valid" and Ruffle reports it as a domain resolution failure. Start at today.
-  TAS_START_TIME="$(date -d 'today 00:00' +%s)"
+  # In replay (no HTTPS), start at the recorded run's creation instead, so the clock the game
+  # sees never changes from one day to the next.
+  if [[ "$MIRROR" == replay ]]; then
+    TAS_START_TIME="$(date -d "$(jq -r '.created_at' <<< "$RUN_JSON")" +%s)"
+  else
+    TAS_START_TIME="$(date -d 'today 00:00' +%s)"
+  fi
   log_info "Launcher: $LIBTAS (system time: $(date -d "@$TAS_START_TIME" -Iseconds))"
   env -u WAYLAND_DISPLAY "$LIBTAS" --system-time-sec "$TAS_START_TIME" \
     "$(command -v "$RUFFLE")" "${QUOTED_ARGS[@]}"
