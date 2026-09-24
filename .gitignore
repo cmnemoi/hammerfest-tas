@@ -1,3 +1,8 @@
 .env
 *.log
+# Runs recorded from eternalfest.net by the former run.sh (hftas replay --dir mirror)
 mirror/
+recordings/
+.venv/
+__pycache__/
+.pytest_cache/

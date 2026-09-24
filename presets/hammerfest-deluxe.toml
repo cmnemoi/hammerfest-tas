@@ -1,0 +1,35 @@
+# Run presets of hammerfest-deluxe, for `hftas play|record PRESET`.
+#
+# Option ids come from games/hammerfest-deluxe/eternalfest.toml, [modes.deluxe.options]:
+#   nightmare = Cauchemar       boost = Tornade        insight = Intuition
+#   noeffect  = Pas d'objets d'aide (no RNG from help items)
+# `hftas options` lists every option of the mode.
+#
+# A preset can override any key of [defaults].
+
+[defaults]
+mode = "deluxe"
+# eternaldev profile giving the families ([profiles] of the game's eternalfest.toml):
+# "full" = every quest completed, "default" = new account
+profile = "full"
+
+[defaults.settings]
+detail = true
+shake = true
+sound = true
+music = false
+
+[presets.speedrun-no-rng]
+options = ["nightmare", "boost", "noeffect"]
+
+[presets.speedrun-rng]
+options = ["nightmare", "boost"]
+
+[presets.pap-no-rng]
+options = ["boost", "insight", "noeffect"]
+
+[presets.pap-rng]
+options = ["boost", "insight"]
+
+[presets.sandbox]
+options = ["nightmare", "boost", "insight"]

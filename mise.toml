@@ -1,9 +1,11 @@
-# Tools to build the games (git submodules in games/).
+# Tools to build and serve the games (git submodules in games/) and to run hftas (./src).
 # Run everything inside the distrobox: system deps are listed in distrobox.ini.
 
 [tools]
 node = "24"
 haxe = "3.1.3" # patchman only works with Haxe 3.1.3
+python = "3.14"
+uv = "latest"
 
 # swfmill has no Linux binary: compile it from source (build deps in distrobox.ini)
 [tools."http:swfmill"]
@@ -14,9 +16,33 @@ bin_path = "bin"
 postinstall = "cd \"$MISE_TOOL_INSTALL_PATH\" && ./configure --prefix=\"$MISE_TOOL_INSTALL_PATH\" && make -j\"$(nproc)\" && make install"
 
 [env]
+# Game hftas plays when -g is not given
+HFTAS_GAME = "hammerfest-deluxe"
 # Haxe 3.1.3 does not find its standard library on its own
 HAXE_STD_PATH = "{{ env.MISE_DATA_DIR | default(value=env.HOME ~ '/.local/share/mise') }}/installs/haxe/3.1.3/std"
+# Puts `hftas` on the PATH once installed by `mise run setup` (uv sync)
+_.python.venv = { path = ".venv", create = true }
 
 [settings]
 # Provides the yarn launcher; each game pins its own yarn release (.yarnrc.yml)
 node.corepack = true
+
+[tasks.setup]
+description = "First-time setup: submodules, hftas, then install and build every game"
+dir = "{{config_root}}"
+run = [
+  "git submodule update --init",
+  "uv sync",
+  "hftas setup",
+]
+
+[tasks.serve]
+description = "Serve every game with eternaldev on http://localhost:50317 (same as `hftas serve`)"
+dir = "{{config_root}}"
+run = "hftas serve"
+raw = true # eternaldev logs straight to the terminal, Ctrl+C stops it
+
+[tasks.test]
+description = "Test hftas (deep tests also run against the game `hftas serve` serves)"
+dir = "{{config_root}}"
+run = "uv run pytest"
