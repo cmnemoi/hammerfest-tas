@@ -1,6 +1,6 @@
 # Hammerfest TAS
 
-Make TAS of [Eternalfest](https://eternalfest.net/) contrées with libTAS.
+Make TAS of [Eternalfest](https://eternalfest.net/) contrées with [libTAS](https://github.com/clementgallet/libTAS).
 
 ## Requirements
 
