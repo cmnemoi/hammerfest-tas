@@ -53,3 +53,11 @@ def test_tas_launches_never_download_openh264():
 
     config_dir = Path(args[args.index("--config") + 1])
     assert tomllib.loads((config_dir / "preferences.toml").read_text())["enable_openh264"] is False
+
+
+def test_encoding_launches_render_with_vulkan_so_libtas_captures_the_whole_window():
+    launch = Launch("http://127.0.0.1:8765", RUN, tas=True)
+
+    args = ruffle_args(launch, encode=True)
+
+    assert args[args.index("--graphics") + 1] == "vulkan"

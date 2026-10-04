@@ -60,7 +60,7 @@ class Launcher(Protocol):
     def launch(self, launch: Launch) -> int: ...
 
 
-def ruffle_args(launch: Launch) -> list[str]:
+def ruffle_args(launch: Launch, encode: bool = False) -> list[str]:
     args = [
         "--base", f"{launch.base_url}/",
         "--spoof-url", launch.swf_url,
@@ -73,30 +73,33 @@ def ruffle_args(launch: Launch) -> list[str]:
         # - blocking loads: a loaded SWF is parsed in one go, not in slices sized by real time
         #   (its download still completes on other threads: leave a margin before the first input)
         # - gl backend: lets libTAS force software rendering (needed for savestates)
+        #   but libTAS then dumps 1x1 videos: encoding replays use vulkan instead
         # - no GUI: the menu bar would eat inputs and change the window size
         # - own config: no OpenH264 download, whose duration shifts every load
-        args += ["--load-behavior", "blocking", "--graphics", "gl", "--no-gui", "--config", str(TAS_CONFIG_DIR)]
+        graphics = "vulkan" if encode else "gl"
+        args += ["--load-behavior", "blocking", "--graphics", graphics, "--no-gui", "--config", str(TAS_CONFIG_DIR)]
     return args + [launch.swf_url]
 
 
-def libtas_command(libtas: str, ruffle_path: str, launch: Launch) -> list[str]:
+def libtas_command(libtas: str, ruffle_path: str, launch: Launch, encode: bool = False) -> list[str]:
     # libTAS joins the game args into one string run through `sh -c`: quote each one,
     # otherwise the spaces and quotes in the JSON params split the command
-    game_args = [shlex.quote(arg) for arg in ruffle_args(launch)]
+    game_args = [shlex.quote(arg) for arg in ruffle_args(launch, encode)]
     # libTAS preloads itself into the real binary: pass Ruffle's absolute path, never a wrapper
     return [libtas, "--system-time-sec", str(launch.start_time), ruffle_path, *game_args]
 
 
 class RuffleLauncher:
-    def __init__(self, ruffle: str = "ruffle", libtas: str = "libTAS"):
+    def __init__(self, ruffle: str = "ruffle", libtas: str = "libTAS", encode: bool = False):
         self.ruffle = ruffle
         self.libtas = libtas
+        self.encode = encode
 
     def launch(self, launch: Launch) -> int:
         ruffle_path = self._which(self.ruffle)
         env = {"RUST_LOG": "warn,ruffle=info,avm_trace=info", **os.environ}
         if launch.tas:
-            command = libtas_command(self._which(self.libtas), ruffle_path, launch)
+            command = libtas_command(self._which(self.libtas), ruffle_path, launch, self.encode)
             # libTAS is X11-only: hide Wayland so Ruffle falls back to XWayland
             env.pop("WAYLAND_DISPLAY", None)
             # Qt still picks Wayland from XDG_SESSION_TYPE (connecting to wayland-0 by default),

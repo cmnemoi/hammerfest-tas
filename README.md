@@ -43,6 +43,19 @@ Set these once in the libTAS window, which remembers them:
 - Frames per second: 40
 - Runtime → Time tracking: `clock_gettime()` monotonic
 
+## Encode a video
+
+libTAS dumps 1x1 videos of Ruffle's OpenGL rendering. To encode a movie, replay it rendered with Vulkan:
+
+```sh
+hftas run speedrun-no-rng --encode
+```
+
+The dump is 800x600, with the game scaled to 485x600 in its top-left corner. In the libTAS encode settings,
+add `-vf crop=484:600:0:0` to the ffmpeg options to keep only the game (x264 needs an even width).
+
+Savestates may not work with Vulkan: TAS without `--encode`.
+
 ## Presets
 
 A preset is a set of options, defined in `presets/<contrée>.toml`. `hftas run` without a

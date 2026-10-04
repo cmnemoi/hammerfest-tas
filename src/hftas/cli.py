@@ -8,6 +8,7 @@ From the host, hftas runs itself inside the hammerfest-tas distrobox.
   hftas run pap-rng            first time: new run of the preset, recorded in recordings/<game>/pap-rng
                                then: replays that same run, to TAS it (eternaldev not needed)
   hftas run pap-rng --new      record a new run in its place
+  hftas run pap-rng --encode   replay it rendered with Vulkan, to dump a video from libTAS
   hftas run sandbox -o ninja -x insight   new run with an extra option, without another
   hftas build                  install and build every game (or -g one), after changing it
 """
@@ -28,6 +29,7 @@ from hftas.tas import Tas
 
 ROOT = Path(__file__).resolve().parents[2]
 RUFFLE_ONLY_HELP = "launch Ruffle alone instead of under libTAS, to test something"
+ENCODE_HELP = "render with Vulkan so libTAS dumps the whole window, to encode a video (savestates may not work)"
 log = logging.getLogger("hftas")
 
 
@@ -35,7 +37,7 @@ def main(argv: list[str] | None = None, launcher: Launcher | None = None, worksp
     if argv is None:  # real command line, not a test
         enter_box_if_needed(ROOT, sys.argv[1:])
     args = _parser().parse_args(argv)
-    args.launcher = launcher or RuffleLauncher()
+    args.launcher = launcher or RuffleLauncher(encode=getattr(args, "encode", False))
     args.workspace = workspace or Workspace(ROOT)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-5s %(message)s", datefmt="%H:%M:%S")
     try:
@@ -159,6 +161,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--profile", help="eternaldev profile giving the families (default: from the preset, new runs only)")
     run.add_argument("--dir", type=Path, help="recording directory (default: recordings/<game>/NAME), e.g. an older mirror/")
     run.add_argument("--ruffle-only", dest="tas", action="store_false", help=RUFFLE_ONLY_HELP)
+    run.add_argument("--encode", action="store_true", help=ENCODE_HELP)
     return parser
 
 
