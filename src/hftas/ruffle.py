@@ -8,9 +8,13 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol
 
 log = logging.getLogger("hftas.ruffle")
+
+# Ruffle preferences for TAS launches, instead of the user's own
+TAS_CONFIG_DIR = Path(__file__).with_name("ruffle-config")
 
 
 class LaunchError(Exception):
@@ -66,10 +70,12 @@ def ruffle_args(launch: Launch) -> list[str]:
     for key, value in launch.params.items():
         args += ["-P", f"{key}={value}"]
     if launch.tas:
-        # - blocking loads: network latency no longer shifts frames, so movies stay in sync
+        # - blocking loads: a loaded SWF is parsed in one go, not in slices sized by real time
+        #   (its download still completes on other threads: leave a margin before the first input)
         # - gl backend: lets libTAS force software rendering (needed for savestates)
         # - no GUI: the menu bar would eat inputs and change the window size
-        args += ["--load-behavior", "blocking", "--graphics", "gl", "--no-gui"]
+        # - own config: no OpenH264 download, whose duration shifts every load
+        args += ["--load-behavior", "blocking", "--graphics", "gl", "--no-gui", "--config", str(TAS_CONFIG_DIR)]
     return args + [launch.swf_url]
 
 

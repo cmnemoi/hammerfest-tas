@@ -1,0 +1,3 @@
+# Ruffle preferences for TAS launches (passed with --config)
+# Ruffle downloads OpenH264 at every launch: its variable duration shifts every load by a few frames
+enable_openh264 = false

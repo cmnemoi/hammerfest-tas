@@ -1,4 +1,6 @@
 import subprocess
+import tomllib
+from pathlib import Path
 
 from hftas.ruffle import Launch, libtas_command, ruffle_args
 
@@ -44,3 +46,10 @@ def test_loader_gets_the_run_options_from_its_flashvars():
 
     assert params["game"] == RUN["game"]["id"]
     assert '"options":["nightmare","noeffect"]' in params["options"]
+
+
+def test_tas_launches_never_download_openh264():
+    args = ruffle_args(Launch("http://127.0.0.1:8765", RUN, tas=True))
+
+    config_dir = Path(args[args.index("--config") + 1])
+    assert tomllib.loads((config_dir / "preferences.toml").read_text())["enable_openh264"] is False
