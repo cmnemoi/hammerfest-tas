@@ -1,7 +1,8 @@
-"""Run configurations: which mode, options, profile and settings a run starts with."""
+"""Run configurations: which mode, options, profile and settings a run starts with, and its clock."""
 
 import tomllib
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 
 LOCALE = "fr-FR"
@@ -35,6 +36,8 @@ class RunConfig:
     options: tuple[str, ...]
     profile: str
     settings: Settings
+    # Clock libTAS gives the game, which seeds its randomness (None: the run's creation time)
+    clock: datetime | None = None
 
     def with_options(self, added: list[str], removed: list[str]) -> "RunConfig":
         unknown = [option for option in removed if option not in self.options and option not in added]
@@ -65,7 +68,7 @@ def load_presets(path: Path) -> tuple[RunConfig, dict[str, RunConfig]]:
 
 
 def _read_config(raw: dict, base: RunConfig | None, where: str) -> RunConfig:
-    known = {"mode", "options", "profile", "settings"}
+    known = {"mode", "options", "profile", "settings", "clock"}
     if extra := set(raw) - known:
         raise PresetError(f"{where}: unknown keys {sorted(extra)} (expected {sorted(known)})")
     base = base or BASE_CONFIG
@@ -78,9 +81,16 @@ def _read_config(raw: dict, base: RunConfig | None, where: str) -> RunConfig:
     options = raw.get("options", base.options)
     if not isinstance(options, (list, tuple)) or not all(isinstance(option, str) for option in options):
         raise PresetError(f"{where}: options must be a list of option ids")
+    clock = raw.get("clock", base.clock)
+    if clock is not None and not isinstance(clock, datetime):
+        raise PresetError(f"{where}: clock must be a TOML date-time (2026-10-04T19:33:39.001Z), not {clock!r}")
+    if clock is not None and clock.tzinfo is None:
+        # a local time would give another seed on a computer in another time zone
+        raise PresetError(f"{where}: clock {clock.isoformat()} needs a time zone (Z or +02:00)")
     return RunConfig(
         mode=raw.get("mode", base.mode),
         options=tuple(options),
         profile=raw.get("profile", base.profile),
         settings=settings,
+        clock=clock,
     )

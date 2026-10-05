@@ -43,6 +43,14 @@ class TasWorld:
             self.eternaldev.stop()
         self.eternaldev = FakeEternaldev(self.root / "games" / name, modes=self._modes[name]).start()
 
+    def preset_sets_clock(self, preset: str, clock: str, game: str = HAMMERFEST) -> None:
+        """Adds `clock = <TOML datetime>` to a preset of the game's presets file."""
+        path = self.root / "presets" / f"{game}.toml"
+        header = f"[presets.{preset}]\n"
+        content = path.read_text()
+        assert header in content, f"no preset {preset}"
+        path.write_text(content.replace(header, f"{header}clock = {clock}\n"))
+
     def existing_project(self, name: str) -> str:
         (self.root / name).mkdir()
         return (self.root / name).as_uri()

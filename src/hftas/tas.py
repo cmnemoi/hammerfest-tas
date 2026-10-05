@@ -1,6 +1,7 @@
 """Playing, recording and replaying runs of a game of the workspace."""
 
 import logging
+from datetime import datetime
 
 from hftas.eternaldev import Eternaldev, EternaldevError
 from hftas.games import Game
@@ -29,19 +30,22 @@ class Tas:
         recording.start(run)
         recording.set_clock_offset_us(clock_offset_us)
         with mirror(recording, self.mirror_port, upstream=self.eternaldev.base_url) as url:
-            return self.launcher.launch(Launch(url, run, tas, clock_offset_us))
+            return self.launcher.launch(Launch(url, run, tas, clock_offset_us, config.clock))
 
-    def replay(self, recording: Recording, tas: bool = True, clock_offset_us: int | None = None) -> int:
+    def replay(
+        self, recording: Recording, tas: bool = True, clock_offset_us: int | None = None, clock_start: datetime | None = None,
+    ) -> int:
         """Replays a recorded run: same run, same responses, same clock, no eternaldev needed.
 
-        A clock offset replaces the recorded one, for this replay and the next ones.
+        A clock offset replaces the recorded one, for this replay and the next ones. A clock start
+        (the preset's clock) replaces the run's creation time.
         """
         run = recording.run()
         if clock_offset_us is not None:
             recording.set_clock_offset_us(clock_offset_us)
         log.info("Replaying run %s (%s: %s)", run["id"], run["game_mode"], ", ".join(run["game_options"]) or "no option")
         with mirror(recording, self.mirror_port) as url:
-            return self.launcher.launch(Launch(url, run, tas, recording.clock_offset_us()))
+            return self.launcher.launch(Launch(url, run, tas, recording.clock_offset_us(), clock_start))
 
     def _create_run(self, config: RunConfig) -> dict:
         if not self.game.is_built():

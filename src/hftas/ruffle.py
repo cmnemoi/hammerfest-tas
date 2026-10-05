@@ -7,7 +7,7 @@ import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
@@ -30,6 +30,8 @@ class Launch:
     tas: bool = True
     # Shifts the clock libTAS gives the game, which seeds its randomness (Ruffle reads it to the microsecond)
     clock_offset_us: int = 0
+    # Clock to start from instead of the run's creation (a preset's clock)
+    clock_start: datetime | None = None
 
     @property
     def swf_url(self) -> str:
@@ -59,9 +61,13 @@ class Launch:
 
     @property
     def clock(self) -> tuple[int, int]:
-        """Seconds and nanoseconds libTAS starts the game's clock at: the start time plus the offset."""
-        seconds, microseconds = divmod(self.clock_offset_us, 1_000_000)
-        return self.start_time + seconds, microseconds * 1_000
+        """Seconds and nanoseconds libTAS starts the game's clock at: the clock start plus the offset."""
+        if self.clock_start is None:
+            start_us = self.start_time * 1_000_000
+        else:
+            start_us = (self.clock_start - datetime(1970, 1, 1, tzinfo=timezone.utc)) // timedelta(microseconds=1)
+        seconds, microseconds = divmod(start_us + self.clock_offset_us, 1_000_000)
+        return seconds, microseconds * 1_000
 
 
 class Launcher(Protocol):

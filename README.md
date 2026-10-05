@@ -49,6 +49,9 @@ The game draws its randomness (enemy moves, falls, jumps) from a seed Ruffle tak
 libTAS gives it, to the microsecond. That clock is the run's creation time, so every replay of a
 recording draws the same randomness.
 
+A preset can fix that clock instead, so the randomness lives in the repository: see `clock` in
+`presets/hammerfest-deluxe.toml`. Every run of the preset, recorded or replayed, starts at that clock.
+
 To try other randomness on the same run, shift that clock:
 
 ```sh

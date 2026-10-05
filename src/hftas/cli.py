@@ -96,7 +96,7 @@ def cmd_run(args) -> int:
                 f"{recording.directory.name} is already recorded, so its options are fixed: "
                 "drop them, or record a new run with --new"
             )
-        return _tas(args).replay(recording, args.tas, args.clock_offset)
+        return _tas(args).replay(recording, args.tas, args.clock_offset, _config(args).clock)
     return _tas(args).record(_config(args), recording, args.tas, args.clock_offset or 0)
 
 

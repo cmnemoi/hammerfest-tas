@@ -54,3 +54,35 @@ def test_options_must_be_a_list(tmp_path):
 
     with pytest.raises(PresetError, match="list of option ids"):
         load_presets(path)
+
+
+def test_a_preset_clock_is_read_to_the_microsecond(tmp_path):
+    path = write(tmp_path, """
+        [presets.seeded]
+        clock = 2026-10-04T19:33:39.001234Z
+    """)
+
+    _, presets = load_presets(path)
+
+    assert presets["seeded"].clock.isoformat() == "2026-10-04T19:33:39.001234+00:00"
+
+
+def test_a_preset_clock_without_time_zone_is_rejected(tmp_path):
+    # a local time would give another seed on a computer in another time zone
+    path = write(tmp_path, """
+        [presets.seeded]
+        clock = 2026-10-04T19:33:39.001
+    """)
+
+    with pytest.raises(PresetError, match=r"\[presets.seeded\]: clock .*time zone"):
+        load_presets(path)
+
+
+def test_a_preset_clock_written_as_text_is_rejected(tmp_path):
+    path = write(tmp_path, """
+        [presets.seeded]
+        clock = "2026-10-04T19:33:39.001Z"
+    """)
+
+    with pytest.raises(PresetError, match=r"\[presets.seeded\]: clock must be a TOML date-time"):
+        load_presets(path)
