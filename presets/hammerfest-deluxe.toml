@@ -6,6 +6,9 @@
 # `hftas options` lists every option of the mode.
 #
 # A preset can override any key of [defaults].
+#
+# `clock` fixes the clock libTAS gives the game (a TOML date-time with a time zone): it seeds the
+# game's randomness, to the microsecond, so a movie made with it only stays in sync with that clock.
 
 [defaults]
 mode = "deluxe"
@@ -21,6 +24,9 @@ music = false
 
 [presets.speedrun-no-rng]
 options = ["nightmare", "boost", "noeffect"]
+# 1 ms after the recorded run's creation: every level 10 enemy dies by frame 422,
+# Igor reaches level 11 at frame 493 (538 with the run's creation time)
+clock = 2026-10-04T19:33:39.001Z
 
 [presets.speedrun-rng]
 options = ["nightmare", "boost"]
