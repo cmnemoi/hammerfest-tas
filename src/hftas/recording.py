@@ -1,7 +1,8 @@
 """Recordings of a run and every server response, replayable without eternaldev.
 
-A recording directory holds run.json and responses/<key>.{json,body}, keyed by method + path
-(same layout as the former mirror.py, so older recordings still replay).
+A recording directory holds run.json, responses/<key>.{json,body} keyed by method + path
+(same layout as the former mirror.py, so older recordings still replay), and clock.json, the
+clock offset the run is played with (missing in older recordings: no offset).
 """
 
 import hashlib
@@ -34,6 +35,10 @@ class Recording:
     def run_file(self) -> Path:
         return self.directory / "run.json"
 
+    @property
+    def clock_file(self) -> Path:
+        return self.directory / "clock.json"
+
     def exists(self) -> bool:
         return self.run_file.exists()
 
@@ -49,6 +54,15 @@ class Recording:
         if not self.run_file.exists():
             raise RecordingError(f"No recorded run in {self.directory}: record one first (`hftas run`)")
         return json.loads(self.run_file.read_text())
+
+    def clock_offset_us(self) -> int:
+        """Offset of the clock the run is played with, so every replay draws the same randomness."""
+        if not self.clock_file.exists():
+            return 0
+        return json.loads(self.clock_file.read_text())["offset_us"]
+
+    def set_clock_offset_us(self, offset_us: int) -> None:
+        self.clock_file.write_text(json.dumps({"offset_us": offset_us}) + "\n")
 
     def load(self, method: str, path: str) -> tuple[int, dict, bytes] | None:
         entry = self._entry(method, path)

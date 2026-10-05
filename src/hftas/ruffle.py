@@ -28,6 +28,8 @@ class Launch:
     base_url: str
     run: dict
     tas: bool = True
+    # Shifts the clock libTAS gives the game, which seeds its randomness (Ruffle reads it to the microsecond)
+    clock_offset_us: int = 0
 
     @property
     def swf_url(self) -> str:
@@ -54,6 +56,12 @@ class Launch:
     def start_time(self) -> int:
         """Clock libTAS gives the game: the run's creation, so it never changes between replays."""
         return int(datetime.fromisoformat(self.run["created_at"]).timestamp())
+
+    @property
+    def clock(self) -> tuple[int, int]:
+        """Seconds and nanoseconds libTAS starts the game's clock at: the start time plus the offset."""
+        seconds, microseconds = divmod(self.clock_offset_us, 1_000_000)
+        return self.start_time + seconds, microseconds * 1_000
 
 
 class Launcher(Protocol):
@@ -86,7 +94,11 @@ def libtas_command(libtas: str, ruffle_path: str, launch: Launch, encode: bool =
     # otherwise the spaces and quotes in the JSON params split the command
     game_args = [shlex.quote(arg) for arg in ruffle_args(launch, encode)]
     # libTAS preloads itself into the real binary: pass Ruffle's absolute path, never a wrapper
-    return [libtas, "--system-time-sec", str(launch.start_time), ruffle_path, *game_args]
+    seconds, nanoseconds = launch.clock
+    clock = ["--system-time-sec", str(seconds)]
+    if nanoseconds:
+        clock += ["--system-time-nsec", str(nanoseconds)]
+    return [libtas, *clock, ruffle_path, *game_args]
 
 
 class RuffleLauncher:
@@ -105,7 +117,9 @@ class RuffleLauncher:
             # Qt still picks Wayland from XDG_SESSION_TYPE (connecting to wayland-0 by default),
             # and the libTAS input editor then stops repainting: force its GUI on X11 too
             env["QT_QPA_PLATFORM"] = "xcb"
-            log.info("Launching Ruffle under libTAS (clock: %s)", datetime.fromtimestamp(launch.start_time).isoformat())
+            seconds, nanoseconds = launch.clock
+            clock = datetime.fromtimestamp(seconds + nanoseconds / 1e9).isoformat(timespec="microseconds")
+            log.info("Launching Ruffle under libTAS (clock: %s, offset %d µs)", clock, launch.clock_offset_us)
         else:
             command = [ruffle_path, *ruffle_args(launch)]
             log.info("Launching Ruffle on %s", launch.swf_url)

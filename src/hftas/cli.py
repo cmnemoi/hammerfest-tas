@@ -9,6 +9,7 @@ From the host, hftas runs itself inside the hammerfest-tas distrobox.
                                then: replays that same run, to TAS it (eternaldev not needed)
   hftas run pap-rng --new      record a new run in its place
   hftas run pap-rng --encode   replay it rendered with Vulkan, to dump a video from libTAS
+  hftas run pap-rng --clock-offset 1000   replay it with the clock 1 ms later: other randomness, kept for later replays
   hftas run sandbox -o ninja -x insight   new run with an extra option, without another
   hftas build                  install and build every game (or -g one), after changing it
 """
@@ -30,6 +31,10 @@ from hftas.tas import Tas
 ROOT = Path(__file__).resolve().parents[2]
 RUFFLE_ONLY_HELP = "launch Ruffle alone instead of under libTAS, to test something"
 ENCODE_HELP = "render with Vulkan so libTAS dumps the whole window, to encode a video (savestates may not work)"
+CLOCK_OFFSET_HELP = (
+    "shift the clock libTAS gives the game by this many microseconds (>= 0): it seeds the game's randomness. "
+    "The recording keeps it for later replays (default: the recorded offset, 0 for a new run)"
+)
 log = logging.getLogger("hftas")
 
 
@@ -82,6 +87,8 @@ def _games(args) -> list[Game]:
 
 
 def cmd_run(args) -> int:
+    if args.clock_offset is not None and args.clock_offset < 0:
+        raise LaunchError(f"--clock-offset must be 0 or more microseconds, not {args.clock_offset}")
     recording = _recording(args)
     if recording.exists() and not args.new:
         if args.option or args.without or args.mode or args.profile:
@@ -89,8 +96,8 @@ def cmd_run(args) -> int:
                 f"{recording.directory.name} is already recorded, so its options are fixed: "
                 "drop them, or record a new run with --new"
             )
-        return _tas(args).replay(recording, args.tas)
-    return _tas(args).record(_config(args), recording, args.tas)
+        return _tas(args).replay(recording, args.tas, args.clock_offset)
+    return _tas(args).record(_config(args), recording, args.tas, args.clock_offset or 0)
 
 
 def cmd_build(args) -> int:
@@ -162,6 +169,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--dir", type=Path, help="recording directory (default: recordings/<game>/NAME), e.g. an older mirror/")
     run.add_argument("--ruffle-only", dest="tas", action="store_false", help=RUFFLE_ONLY_HELP)
     run.add_argument("--encode", action="store_true", help=ENCODE_HELP)
+    run.add_argument("--clock-offset", type=int, metavar="MICROSECONDS", help=CLOCK_OFFSET_HELP)
     return parser
 
 

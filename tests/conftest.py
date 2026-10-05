@@ -6,6 +6,7 @@ import pytest
 
 from hftas.cli import main
 from hftas.games import GAME_ENV, Workspace
+from hftas.ruffle import libtas_command
 from tests.fakes import DELUXE_OPTIONS, FakeEternaldev, FakeLoader, GameSession
 
 REPO = Path(__file__).resolve().parents[1]
@@ -87,6 +88,13 @@ class TasWorld:
 
     def recording_dir(self, name: str, game: str = HAMMERFEST) -> Path:
         return self.root / "recordings" / game / name
+
+    def libtas_clock(self) -> int:
+        """Clock libTAS gave the last game, in nanoseconds since the epoch."""
+        command = libtas_command("libTAS", "/usr/local/bin/ruffle", self.loader.launches[-1])
+        seconds = int(command[command.index("--system-time-sec") + 1])
+        nanoseconds = int(command[command.index("--system-time-nsec") + 1]) if "--system-time-nsec" in command else 0
+        return seconds * 1_000_000_000 + nanoseconds
 
     @property
     def games_started(self) -> list[GameSession]:

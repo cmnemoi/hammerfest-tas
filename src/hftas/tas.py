@@ -23,19 +23,25 @@ class Tas:
         run = self._create_run(config)
         return self.launcher.launch(Launch(self.eternaldev.base_url, run, tas))
 
-    def record(self, config: RunConfig, recording: Recording, tas: bool = True) -> int:
+    def record(self, config: RunConfig, recording: Recording, tas: bool = True, clock_offset_us: int = 0) -> int:
         """Plays a new run through a mirror saving every response, for identical replays."""
         run = self._create_run(config)
         recording.start(run)
+        recording.set_clock_offset_us(clock_offset_us)
         with mirror(recording, self.mirror_port, upstream=self.eternaldev.base_url) as url:
-            return self.launcher.launch(Launch(url, run, tas))
+            return self.launcher.launch(Launch(url, run, tas, clock_offset_us))
 
-    def replay(self, recording: Recording, tas: bool = True) -> int:
-        """Replays a recorded run: same run, same responses, no eternaldev needed."""
+    def replay(self, recording: Recording, tas: bool = True, clock_offset_us: int | None = None) -> int:
+        """Replays a recorded run: same run, same responses, same clock, no eternaldev needed.
+
+        A clock offset replaces the recorded one, for this replay and the next ones.
+        """
         run = recording.run()
+        if clock_offset_us is not None:
+            recording.set_clock_offset_us(clock_offset_us)
         log.info("Replaying run %s (%s: %s)", run["id"], run["game_mode"], ", ".join(run["game_options"]) or "no option")
         with mirror(recording, self.mirror_port) as url:
-            return self.launcher.launch(Launch(url, run, tas))
+            return self.launcher.launch(Launch(url, run, tas, recording.clock_offset_us()))
 
     def _create_run(self, config: RunConfig) -> dict:
         if not self.game.is_built():

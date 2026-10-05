@@ -43,6 +43,21 @@ Set these once in the libTAS window, which remembers them:
 - Frames per second: 40
 - Runtime → Time tracking: `clock_gettime()` monotonic
 
+## Randomness
+
+The game draws its randomness (enemy moves, falls, jumps) from a seed Ruffle takes from the clock
+libTAS gives it, to the microsecond. That clock is the run's creation time, so every replay of a
+recording draws the same randomness.
+
+To try other randomness on the same run, shift that clock:
+
+```sh
+hftas run speedrun-no-rng --clock-offset 1000
+```
+
+The recording keeps the offset: later `hftas run speedrun-no-rng` replay with it. A movie only stays in
+sync with the offset it was made with. `--clock-offset 0` brings back the original clock.
+
 ## Encode a video
 
 libTAS dumps 1x1 videos of Ruffle's OpenGL rendering. To encode a movie, replay it rendered with Vulkan:

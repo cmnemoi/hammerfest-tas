@@ -34,6 +34,8 @@ def test_libtas_clock_starts_at_the_run_creation():
     command = libtas_command("libTAS", "/usr/local/bin/ruffle", launch)
 
     assert command[1:3] == ["--system-time-sec", "1790248279"]
+    # no sub-second clock without an offset: movies recorded before offsets existed stay in sync
+    assert "--system-time-nsec" not in command
 
 
 def test_only_tas_launches_use_blocking_loads():
